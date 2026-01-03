@@ -3,7 +3,9 @@ using Microsoft.EntityFrameworkCore;
 using ProductCacheApi.Cache;
 using ProductCacheApi.Entities;
 using ProductCacheApi.DbContext;
+using ProductCacheApi.DTOs;
 using ProductCacheApi.Interfaces;
+using ProductCacheApi.Responses;
 
 namespace ProductCacheApi.Controllers;
 
@@ -61,18 +63,37 @@ public class ProductControllers : ControllerBase
     }
 
     [HttpPost]
-    public async Task<IActionResult> Create(Product product)
+    public async Task<IActionResult> Create(CreateProductDto dto)
     {
-        _logger.LogInformation("Initializating the creation of product {@Product}", product);
+        _logger.LogInformation("Creating product {@Dto}", dto);
+        
+        var product = new Product
+        {
+            Name = dto.Name,
+            Price = dto.Price,
+            Stock = dto.Stock,
+            CreatedAt = DateTime.UtcNow
+        }
+        ;
         
         _context.Products.Add(product);
         await _context.SaveChangesAsync();
 
-        await _cache.RemoveAsync(ProductListCacheKey);
-        
-        _logger.LogInformation("Product created successfully : \nId {ProductId} \nProduct {@Product}", product.Id, product);
-        
-        return CreatedAtAction(nameof(GetById), new { id = product.Id }, product);
+        await _cache.RemoveAsync("products");
+
+        var response = new ProductDto
+        {
+            Id = product.Id,
+            Name = product.Name,
+            Price = product.Price,
+            Stock = product.Stock
+        };
+
+        return CreatedAtAction(
+            nameof(GetById),
+            new { id = product.Id },
+            ApiResponse<ProductDto>.Ok(response, "Created product successfully")
+        );
     }
 
     [HttpPut("{id}")]
