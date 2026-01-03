@@ -3,13 +3,23 @@ using Microsoft.EntityFrameworkCore;
 using ProductCacheApi.DbContext;
 using ProductCacheApi.Interfaces;
 using ProductCacheApi.Cache;
-// using DotNetEnv;
+using Serilog;
 
-// Env.Load();
-// var dbConnection = Environment.GetEnvironmentVariable("DefaultConnection");
+
 
 var builder = WebApplication.CreateBuilder(args);
 
+Log.Logger = new LoggerConfiguration()
+    .MinimumLevel.Information()
+    .Enrich.FromLogContext()
+    .WriteTo.Console()
+    .WriteTo.File(
+        path: "Logs/log-.txt",
+        rollingInterval: RollingInterval.Day
+    )
+    .CreateLogger();
+
+builder.Host.UseSerilog();
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseMySql(
         builder.Configuration.GetConnectionString("DefaultConnection"),
@@ -34,5 +44,6 @@ var app = builder.Build();
 app.UseSwagger();
 app.UseSwaggerUI();
 
+app.UseSerilogRequestLogging();
 app.MapControllers();
 app.Run();
