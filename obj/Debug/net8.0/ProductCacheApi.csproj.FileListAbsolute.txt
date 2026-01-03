@@ -113,3 +113,5 @@ C:\Users\italo\programando\backend\ProductCacheApi\obj\Debug\net8.0\refint\Produ
 C:\Users\italo\programando\backend\ProductCacheApi\obj\Debug\net8.0\ProductCacheApi.pdb
 C:\Users\italo\programando\backend\ProductCacheApi\obj\Debug\net8.0\ProductCacheApi.genruntimeconfig.cache
 C:\Users\italo\programando\backend\ProductCacheApi\obj\Debug\net8.0\ref\ProductCacheApi.dll
+C:\Users\italo\programando\backend\ProductCacheApi\bin\Debug\net8.0\DotNetEnv.dll
+C:\Users\italo\programando\backend\ProductCacheApi\bin\Debug\net8.0\Sprache.dll

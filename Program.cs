@@ -4,24 +4,17 @@ using ProductCacheApi.DbContext;
 using ProductCacheApi.Interfaces;
 using ProductCacheApi.Cache;
 // using DotNetEnv;
-using Microsoft.Extensions.Configuration;
 
 // Env.Load();
 // var dbConnection = Environment.GetEnvironmentVariable("DefaultConnection");
-
-var config = new ConfigurationBuilder()
-    .AddUserSecrets<Program>()
-    .Build();
-
-string connectionString = config.GetSection("ConnectionStrings")["DefaultConnection"];
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseMySql(
-        builder.Configuration.GetConnectionString(connectionString),
+        builder.Configuration.GetConnectionString("DefaultConnection"),
         ServerVersion.AutoDetect(
-            builder.Configuration.GetConnectionString(connectionString)
+            builder.Configuration.GetConnectionString("DefaultConnection")
         )
     ));
 

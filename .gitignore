@@ -1,2 +1,2 @@
 /ProductCacheApi.csproj
-.env
+appsettings.Development.json
