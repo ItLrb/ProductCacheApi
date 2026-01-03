@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using ProductCacheApi.DbContext;
 using ProductCacheApi.Interfaces;
 using ProductCacheApi.Cache;
+using ProductCacheApi.Middlewares;
 using Serilog;
 
 
@@ -41,6 +42,7 @@ builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
+app.UseMiddleware<ExceptionMiddleware>();
 app.UseSwagger();
 app.UseSwaggerUI();
 
