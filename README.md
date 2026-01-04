@@ -58,7 +58,7 @@ ProductCacheApi/
 ### 1. Clone o repositório
 
 ```bash
-git clone https://github.com/seu-usuario/ProductCacheApi.git
+git clone https://github.com/ItLrb/ProductCacheApi.git
 cd ProductCacheApi
 ```
 
