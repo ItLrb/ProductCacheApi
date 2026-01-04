@@ -37,7 +37,7 @@ public class ProductControllers : ControllerBase
         var products = await _context.Products.AsNoTracking().ToListAsync();
         await _cache.SetAsync(ProductListCacheKey, products, TimeSpan.FromMinutes(5));
         
-        _logger.LogInformation("All products was triggered sucgcessfully");
+        _logger.LogInformation("All products was triggered successfully");
         return Ok(new { source = "database", data = products });
     }
 
@@ -65,6 +65,9 @@ public class ProductControllers : ControllerBase
     [HttpPost]
     public async Task<IActionResult> Create(CreateProductDto dto)
     {
+        if (!ModelState.IsValid)
+            return BadRequest(ModelState);
+        
         _logger.LogInformation("Creating product {@Dto}", dto);
         
         var product = new Product
@@ -73,13 +76,12 @@ public class ProductControllers : ControllerBase
             Price = dto.Price,
             Stock = dto.Stock,
             CreatedAt = DateTime.UtcNow
-        }
-        ;
+        };
         
         _context.Products.Add(product);
         await _context.SaveChangesAsync();
 
-        await _cache.RemoveAsync("products");
+        await _cache.RemoveAsync(ProductListCacheKey);
 
         var response = new ProductDto
         {
@@ -97,18 +99,25 @@ public class ProductControllers : ControllerBase
     }
 
     [HttpPut("{id}")]
-    public async Task<IActionResult> Update(int id, Product product)
+    public async Task<IActionResult> Update(int id, UpdateProductDto dto)
     {
-        if (id != product.Id)
-            return BadRequest();
+        if (!ModelState.IsValid)
+            return BadRequest(ModelState);
         
-        _context.Entry(product).State = EntityState.Modified;
+        var product = await _context.Products.FindAsync(id);
+        if (product is null)
+            return NotFound();
+        
+        product.Name = dto.Name;
+        product.Price = dto.Price;
+        product.Stock = dto.Stock;
+        
         await _context.SaveChangesAsync();
 
         await _cache.RemoveAsync(ProductListCacheKey);
         await _cache.RemoveAsync($"product:{id}");
 
-        _logger.LogInformation("Product with ID : {ProductId} was update successfully", product.Id);
+        _logger.LogInformation("Product with ID {ProductId} was updated successfully", product.Id);
         return NoContent();
     }
 
@@ -127,7 +136,7 @@ public class ProductControllers : ControllerBase
         await _cache.RemoveAsync(ProductListCacheKey);
         await _cache.RemoveAsync($"product:{id}");
 
-        _logger.LogInformation("Product with ID {ProductId} by the name {Product} was successfully deleted", product.Id, product);
+        _logger.LogInformation("Product with ID {ProductId} by the name {ProductName} was successfully deleted", product.Id, product.Name);
         return NoContent();
     }
 }
