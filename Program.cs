@@ -2,6 +2,8 @@ using Microsoft.EntityFrameworkCore;
 using ProductCacheApi.DbContext;
 using ProductCacheApi.Interfaces;
 using ProductCacheApi.Cache;
+using ProductCacheApi.Controllers;
+using ProductCacheApi.Features.Products;
 using ProductCacheApi.Middlewares;
 using Serilog;
 
@@ -33,6 +35,7 @@ builder.Services.AddStackExchangeRedisCache(options =>
     options.Configuration = builder.Configuration["Redis:Connection"];
 });
 builder.Services.AddScoped<ICacheService, RedisCacheService>();
+builder.Services.AddScoped<ProductService>();
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();

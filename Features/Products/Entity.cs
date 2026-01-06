@@ -1,6 +1,6 @@
 namespace ProductCacheApi.Entities;
 
-public class Product
+public class Entity
 {
     public int Id { get; set; }
     public required string Name { get; set; }

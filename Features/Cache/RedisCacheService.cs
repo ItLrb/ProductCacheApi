@@ -48,20 +48,18 @@ public class RedisCacheService : ICacheService
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to set cache value for key: {Key}", key);
-            // Silently fail - cache is not critical for application functionality
         }
     }
 
     public async Task RemoveAsync(string key)
     {
-        try
+        try 
         {
             await _cache.RemoveAsync(key);
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to remove cache value for key: {Key}", key);
-            // Silently fail - cache is not critical for application functionality
         }
     }
 }
