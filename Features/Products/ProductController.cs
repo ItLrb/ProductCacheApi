@@ -16,9 +16,9 @@ public class ProductController : ControllerBase
 
     [HttpGet]
     [ProducesResponseType(typeof(IReadOnlyList<ProductDto>), StatusCodes.Status200OK)]
-    public async Task<ActionResult<IReadOnlyList<ProductDto>>> GetAll()
+    public async Task<ActionResult<IReadOnlyList<ProductDto>>> GetAll(CancellationToken cancellationToken)
     {
-        var result = await _productService.GetAll();
+        var result = await _productService.GetAll(cancellationToken);
         SetCacheHeader(result.FromCache);
         return Ok(result.Value);
     }
@@ -26,9 +26,9 @@ public class ProductController : ControllerBase
     [HttpGet("{id:int}")]
     [ProducesResponseType(typeof(ProductDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<ProductDto>> GetById(int id)
+    public async Task<ActionResult<ProductDto>> GetById(int id, CancellationToken cancellationToken)
     {
-        var result = await _productService.GetById(id);
+        var result = await _productService.GetById(id, cancellationToken);
         if (result is null)
             return NotFoundProblem($"Product with ID {id} not found");
 
@@ -39,9 +39,9 @@ public class ProductController : ControllerBase
     [HttpPost]
     [ProducesResponseType(typeof(ProductDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<ActionResult<ProductDto>> Create(CreateProductDto dto)
+    public async Task<ActionResult<ProductDto>> Create(CreateProductDto dto, CancellationToken cancellationToken)
     {
-        var product = await _productService.Create(dto);
+        var product = await _productService.Create(dto, cancellationToken);
         return CreatedAtAction(nameof(GetById), new { id = product.Id }, product);
     }
 
@@ -49,9 +49,9 @@ public class ProductController : ControllerBase
     [ProducesResponseType(typeof(ProductDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<ProductDto>> Update(int id, UpdateProductDto dto)
+    public async Task<ActionResult<ProductDto>> Update(int id, UpdateProductDto dto, CancellationToken cancellationToken)
     {
-        var result = await _productService.Update(id, dto);
+        var result = await _productService.Update(id, dto, cancellationToken);
         if (!result.IsSuccess)
             return NotFoundProblem(result.Error!);
 
@@ -61,9 +61,9 @@ public class ProductController : ControllerBase
     [HttpDelete("{id:int}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> Delete(int id)
+    public async Task<IActionResult> Delete(int id, CancellationToken cancellationToken)
     {
-        var result = await _productService.Delete(id);
+        var result = await _productService.Delete(id, cancellationToken);
         if (!result.IsSuccess)
             return NotFoundProblem(result.Error!);
 

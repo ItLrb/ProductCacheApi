@@ -23,9 +23,9 @@ public class ProductService
 
     private static string ProductCacheKey(int id) => $"product:{id}";
 
-    public async Task<CacheResult<IReadOnlyList<ProductDto>>> GetAll()
+    public async Task<CacheResult<IReadOnlyList<ProductDto>>> GetAll(CancellationToken cancellationToken = default)
     {
-        var cached = await _cache.GetAsync<List<ProductDto>>(ProductListCacheKey);
+        var cached = await _cache.GetAsync<List<ProductDto>>(ProductListCacheKey, cancellationToken);
         if (cached is not null)
             return CacheResult.Hit<IReadOnlyList<ProductDto>>(cached);
 
@@ -39,19 +39,19 @@ public class ProductService
                 Stock = p.Stock,
                 CreatedAt = p.CreatedAt
             })
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
-        await _cache.SetAsync(ProductListCacheKey, products, CacheTtl);
+        await _cache.SetAsync(ProductListCacheKey, products, CacheTtl, cancellationToken);
 
         _logger.LogInformation("Loaded {Count} products from the database", products.Count);
         return CacheResult.Miss<IReadOnlyList<ProductDto>>(products);
     }
 
-    public async Task<CacheResult<ProductDto>?> GetById(int id)
+    public async Task<CacheResult<ProductDto>?> GetById(int id, CancellationToken cancellationToken = default)
     {
         var cacheKey = ProductCacheKey(id);
 
-        var cached = await _cache.GetAsync<ProductDto>(cacheKey);
+        var cached = await _cache.GetAsync<ProductDto>(cacheKey, cancellationToken);
         if (cached is not null)
             return CacheResult.Hit(cached);
 
@@ -66,18 +66,18 @@ public class ProductService
                 Stock = p.Stock,
                 CreatedAt = p.CreatedAt
             })
-            .FirstOrDefaultAsync();
+            .FirstOrDefaultAsync(cancellationToken);
 
         if (product is null)
             return null;
 
-        await _cache.SetAsync(cacheKey, product, CacheTtl);
+        await _cache.SetAsync(cacheKey, product, CacheTtl, cancellationToken);
 
         _logger.LogInformation("Loaded product {ProductId} from the database", product.Id);
         return CacheResult.Miss(product);
     }
 
-    public async Task<ProductDto> Create(CreateProductDto dto)
+    public async Task<ProductDto> Create(CreateProductDto dto, CancellationToken cancellationToken = default)
     {
         var product = new Product
         {
@@ -88,17 +88,17 @@ public class ProductService
         };
 
         _context.Products.Add(product);
-        await _context.SaveChangesAsync();
+        await _context.SaveChangesAsync(cancellationToken);
 
-        await _cache.RemoveAsync(ProductListCacheKey);
+        await _cache.RemoveAsync(ProductListCacheKey, cancellationToken);
 
         _logger.LogInformation("Product {ProductId} was created", product.Id);
         return ToDto(product);
     }
 
-    public async Task<Result<ProductDto>> Update(int id, UpdateProductDto dto)
+    public async Task<Result<ProductDto>> Update(int id, UpdateProductDto dto, CancellationToken cancellationToken = default)
     {
-        var product = await _context.Products.FindAsync(id);
+        var product = await _context.Products.FindAsync([id], cancellationToken);
         if (product is null)
             return Result<ProductDto>.Failure($"Product with ID {id} not found");
 
@@ -106,26 +106,26 @@ public class ProductService
         product.Price = dto.Price;
         product.Stock = dto.Stock;
 
-        await _context.SaveChangesAsync();
+        await _context.SaveChangesAsync(cancellationToken);
 
-        await _cache.RemoveAsync(ProductListCacheKey);
-        await _cache.RemoveAsync(ProductCacheKey(id));
+        await _cache.RemoveAsync(ProductListCacheKey, cancellationToken);
+        await _cache.RemoveAsync(ProductCacheKey(id), cancellationToken);
 
         _logger.LogInformation("Product {ProductId} was updated", product.Id);
         return Result<ProductDto>.Success(ToDto(product));
     }
 
-    public async Task<Result<bool>> Delete(int id)
+    public async Task<Result<bool>> Delete(int id, CancellationToken cancellationToken = default)
     {
-        var product = await _context.Products.FindAsync(id);
+        var product = await _context.Products.FindAsync([id], cancellationToken);
         if (product is null)
             return Result<bool>.Failure($"Product with ID {id} not found");
 
         _context.Products.Remove(product);
-        await _context.SaveChangesAsync();
+        await _context.SaveChangesAsync(cancellationToken);
 
-        await _cache.RemoveAsync(ProductListCacheKey);
-        await _cache.RemoveAsync(ProductCacheKey(id));
+        await _cache.RemoveAsync(ProductListCacheKey, cancellationToken);
+        await _cache.RemoveAsync(ProductCacheKey(id), cancellationToken);
 
         _logger.LogInformation("Product {ProductId} ({ProductName}) was deleted", product.Id, product.Name);
         return Result<bool>.Success(true);

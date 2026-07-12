@@ -57,12 +57,18 @@ ProductCacheApi/
 ## 📋 Prerequisites
 
 - [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
-- [Docker](https://www.docker.com/) (recommended) or local MySQL + Redis
+- [Docker](https://www.docker.com/) (recommended) **or** a local MySQL 8 (MariaDB works too) + Redis
+
+```bash
+git clone https://github.com/MiguelLopesDel/Product-Cache-Api.git
+cd Product-Cache-Api
+```
 
 ## 🐳 Running with Docker (recommended)
 
 `compose.yaml` brings up **MySQL, Redis and the API** together, wired via healthchecks so
-the API only starts once the database is ready.
+the API only starts once the database is ready. **Migrations are applied automatically on
+startup** (`ApplyMigrationsAtStartup=true`), so the database is ready with no manual step.
 
 ```bash
 cp .env.example .env      # adjust MYSQL_ROOT_PASSWORD etc.
@@ -73,27 +79,36 @@ docker compose up -d --build
 - Swagger: `http://localhost:8080/swagger` (Development environment)
 - Health: `http://localhost:8080/health`
 
+That's it — `curl http://localhost:8080/api/Product` returns `[]` on a fresh database.
+
 ## 🛠️ Running locally (without Docker)
 
-Configuration is read from environment variables / user-secrets — **no secrets are stored
-in the repository**. The database connection string is required; Redis is optional.
+You need a running MySQL/MariaDB and (optionally) Redis. Configuration is read from
+user-secrets / environment variables — **no secrets are stored in the repository**. The
+database connection string is required; Redis is optional (an in-memory cache is used when
+it is absent).
 
 ```bash
-# Required: database connection
+# 1. Create the database (and optionally a dedicated user)
+mysql -u root -p -e "CREATE DATABASE productcachedb;"
+
+# 2. Install the EF Core CLI tool (once per machine)
+dotnet tool install --global dotnet-ef
+
+# 3. Configure the connection (stored outside the repo via user-secrets)
 dotnet user-secrets set "ConnectionStrings:DefaultConnection" \
   "server=localhost;port=3306;database=productcachedb;user=root;password=your-password"
 
-# Optional: enable Redis (otherwise an in-memory cache is used)
+# 4. (Optional) enable Redis
 dotnet user-secrets set "Redis:Connection" "localhost:6379"
 
-# Apply migrations
+# 5. Apply migrations, then run
 dotnet ef database update
-
-# Run
 dotnet run
 ```
 
-The app is served at `http://localhost:5149` (see `Properties/launchSettings.json`).
+The app is served at `http://localhost:5149` (see `Properties/launchSettings.json`);
+Swagger at `http://localhost:5149/swagger`.
 
 > If `ConnectionStrings:DefaultConnection` is missing, the app fails fast at startup with a
 > clear message instead of returning confusing per-request errors.

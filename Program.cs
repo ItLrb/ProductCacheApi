@@ -69,6 +69,14 @@ builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
+// Optionally apply pending migrations at startup. Disabled by default (production-safe);
+// docker-compose turns it on so `docker compose up` yields a ready-to-use database.
+if (app.Configuration.GetValue<bool>("ApplyMigrationsAtStartup"))
+{
+    using var scope = app.Services.CreateScope();
+    await scope.ServiceProvider.GetRequiredService<AppDbContext>().Database.MigrateAsync();
+}
+
 app.UseExceptionHandler();
 
 if (app.Environment.IsDevelopment())

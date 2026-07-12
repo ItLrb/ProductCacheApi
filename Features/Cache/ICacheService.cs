@@ -2,7 +2,7 @@ namespace ProductCacheApi.Features.Cache;
 
 public interface ICacheService
 {
-    Task<T?> GetAsync<T>(string key);
-    Task SetAsync<T>(string key, T value, TimeSpan expiration);
-    Task RemoveAsync(string key);
+    Task<T?> GetAsync<T>(string key, CancellationToken cancellationToken = default);
+    Task SetAsync<T>(string key, T value, TimeSpan expiration, CancellationToken cancellationToken = default);
+    Task RemoveAsync(string key, CancellationToken cancellationToken = default);
 }

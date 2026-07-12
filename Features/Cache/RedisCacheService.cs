@@ -14,11 +14,11 @@ public class RedisCacheService : ICacheService
         _logger = logger;
     }
 
-    public async Task<T?> GetAsync<T>(string key)
+    public async Task<T?> GetAsync<T>(string key, CancellationToken cancellationToken = default)
     {
         try
         {
-            var data = await _cache.GetStringAsync(key);
+            var data = await _cache.GetStringAsync(key, cancellationToken);
             if (data is null)
                 return default;
 
@@ -32,7 +32,7 @@ public class RedisCacheService : ICacheService
         }
     }
 
-    public async Task SetAsync<T>(string key, T value, TimeSpan expiration)
+    public async Task SetAsync<T>(string key, T value, TimeSpan expiration, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -42,7 +42,7 @@ public class RedisCacheService : ICacheService
             };
 
             var json = JsonSerializer.Serialize(value);
-            await _cache.SetStringAsync(key, json, options);
+            await _cache.SetStringAsync(key, json, options, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -50,11 +50,11 @@ public class RedisCacheService : ICacheService
         }
     }
 
-    public async Task RemoveAsync(string key)
+    public async Task RemoveAsync(string key, CancellationToken cancellationToken = default)
     {
         try
         {
-            await _cache.RemoveAsync(key);
+            await _cache.RemoveAsync(key, cancellationToken);
         }
         catch (Exception ex)
         {
