@@ -2,8 +2,6 @@
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
     <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
     <UserSecretsId>be882135-e225-48c8-b810-3d2d2157e816</UserSecretsId>
     <!-- The test project lives under ./tests; keep it out of the web project's source glob. -->

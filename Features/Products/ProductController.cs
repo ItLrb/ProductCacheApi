@@ -7,6 +7,9 @@ namespace ProductCacheApi.Features.Products;
 [Route("api/[controller]")]
 public class ProductController : ControllerBase
 {
+    private const int DefaultPageSize = 20;
+    private const int MaxPageSize = 100;
+
     private readonly ProductService _productService;
 
     public ProductController(ProductService productService)
@@ -15,10 +18,16 @@ public class ProductController : ControllerBase
     }
 
     [HttpGet]
-    [ProducesResponseType(typeof(IReadOnlyList<ProductDto>), StatusCodes.Status200OK)]
-    public async Task<ActionResult<IReadOnlyList<ProductDto>>> GetAll(CancellationToken cancellationToken)
+    [ProducesResponseType(typeof(PagedResult<ProductDto>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<PagedResult<ProductDto>>> GetAll(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = DefaultPageSize,
+        CancellationToken cancellationToken = default)
     {
-        var result = await _productService.GetAll(cancellationToken);
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, MaxPageSize);
+
+        var result = await _productService.GetAll(page, pageSize, cancellationToken);
         SetCacheHeader(result.FromCache);
         return Ok(result.Value);
     }
@@ -30,7 +39,8 @@ public class ProductController : ControllerBase
     {
         var result = await _productService.GetById(id, cancellationToken);
         if (result is null)
-            return NotFoundProblem($"Product with ID {id} not found");
+            return Problem(detail: $"Product with ID {id} not found",
+                statusCode: StatusCodes.Status404NotFound, title: "Resource not found");
 
         SetCacheHeader(result.FromCache);
         return Ok(result.Value);
@@ -53,7 +63,7 @@ public class ProductController : ControllerBase
     {
         var result = await _productService.Update(id, dto, cancellationToken);
         if (!result.IsSuccess)
-            return NotFoundProblem(result.Error!);
+            return ToProblem(result);
 
         return Ok(result.Data);
     }
@@ -65,7 +75,7 @@ public class ProductController : ControllerBase
     {
         var result = await _productService.Delete(id, cancellationToken);
         if (!result.IsSuccess)
-            return NotFoundProblem(result.Error!);
+            return ToProblem(result);
 
         return NoContent();
     }
@@ -73,6 +83,16 @@ public class ProductController : ControllerBase
     private void SetCacheHeader(bool fromCache)
         => Response.Headers["X-Cache"] = fromCache ? "HIT" : "MISS";
 
-    private ObjectResult NotFoundProblem(string detail)
-        => Problem(detail: detail, statusCode: StatusCodes.Status404NotFound, title: "Resource not found");
+    private ObjectResult ToProblem<T>(Result<T> result)
+    {
+        var (status, title) = result.ErrorType switch
+        {
+            ResultError.NotFound => (StatusCodes.Status404NotFound, "Resource not found"),
+            ResultError.Validation => (StatusCodes.Status400BadRequest, "Validation failed"),
+            ResultError.Conflict => (StatusCodes.Status409Conflict, "Conflict"),
+            _ => (StatusCodes.Status400BadRequest, "Request failed")
+        };
+
+        return Problem(detail: result.Error, statusCode: status, title: title);
+    }
 }

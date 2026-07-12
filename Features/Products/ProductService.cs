@@ -23,14 +23,32 @@ public class ProductService
 
     private static string ProductCacheKey(int id) => $"product:{id}";
 
-    public async Task<CacheResult<IReadOnlyList<ProductDto>>> GetAll(CancellationToken cancellationToken = default)
+    public async Task<CacheResult<PagedResult<ProductDto>>> GetAll(int page, int pageSize, CancellationToken cancellationToken = default)
+    {
+        var (products, fromCache) = await GetAllProducts(cancellationToken);
+
+        var items = products
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToList();
+
+        var paged = new PagedResult<ProductDto>(items, page, pageSize, products.Count);
+        return new CacheResult<PagedResult<ProductDto>>(paged, fromCache);
+    }
+
+    // The full catalog is cached under a single key and paged in memory. This keeps cache
+    // invalidation trivial (one key to drop on writes) and is well suited to a product
+    // catalog; a very large, high-churn dataset would call for DB-side paging with a
+    // generation-based cache key instead.
+    private async Task<(List<ProductDto> Products, bool FromCache)> GetAllProducts(CancellationToken cancellationToken)
     {
         var cached = await _cache.GetAsync<List<ProductDto>>(ProductListCacheKey, cancellationToken);
         if (cached is not null)
-            return CacheResult.Hit<IReadOnlyList<ProductDto>>(cached);
+            return (cached, true);
 
         var products = await _context.Products
             .AsNoTracking()
+            .OrderBy(p => p.Id)
             .Select(p => new ProductDto
             {
                 Id = p.Id,
@@ -44,7 +62,7 @@ public class ProductService
         await _cache.SetAsync(ProductListCacheKey, products, CacheTtl, cancellationToken);
 
         _logger.LogInformation("Loaded {Count} products from the database", products.Count);
-        return CacheResult.Miss<IReadOnlyList<ProductDto>>(products);
+        return (products, false);
     }
 
     public async Task<CacheResult<ProductDto>?> GetById(int id, CancellationToken cancellationToken = default)
@@ -100,7 +118,7 @@ public class ProductService
     {
         var product = await _context.Products.FindAsync([id], cancellationToken);
         if (product is null)
-            return Result<ProductDto>.Failure($"Product with ID {id} not found");
+            return Result<ProductDto>.Failure($"Product with ID {id} not found", ResultError.NotFound);
 
         product.Name = dto.Name;
         product.Price = dto.Price;
@@ -119,7 +137,7 @@ public class ProductService
     {
         var product = await _context.Products.FindAsync([id], cancellationToken);
         if (product is null)
-            return Result<bool>.Failure($"Product with ID {id} not found");
+            return Result<bool>.Failure($"Product with ID {id} not found", ResultError.NotFound);
 
         _context.Products.Remove(product);
         await _context.SaveChangesAsync(cancellationToken);

@@ -17,14 +17,15 @@ cache in front of MySQL for read performance.
 
 ## 📌 Features
 
-- ✅ Product CRUD
+- ✅ Product CRUD with **paged** listing
 - ✅ Redis caching with automatic invalidation on writes
 - ✅ **Graceful cache degradation** — the API runs with an in-memory cache when Redis is
   not configured, and fails fast (no ~5s hangs) when a configured Redis is temporarily down
 - ✅ Input validation with Data Annotations
 - ✅ Consistent error responses via **ProblemDetails** (RFC 9457)
 - ✅ Structured logs (console + daily rolling file)
-- ✅ Health check endpoint
+- ✅ `/health` endpoint — checks the database; reports **Degraded** (still `200`) when the
+  cache is down, since the cache is optional
 - ✅ Swagger UI (Development)
 
 ## 🧱 Architecture
@@ -117,28 +118,36 @@ Swagger at `http://localhost:5149/swagger`.
 
 Base URL: `http://localhost:8080/api/Product` (or `:5149` when running locally).
 
-| Method   | Endpoint            | Description        | Success |
-|----------|---------------------|--------------------|---------|
-| `GET`    | `/api/Product`      | List all products  | `200`   |
-| `GET`    | `/api/Product/{id}` | Get product by id  | `200`   |
-| `POST`   | `/api/Product`      | Create a product   | `201`   |
-| `PUT`    | `/api/Product/{id}` | Update a product   | `200`   |
-| `DELETE` | `/api/Product/{id}` | Delete a product   | `204`   |
+| Method   | Endpoint                            | Description             | Success |
+|----------|-------------------------------------|-------------------------|---------|
+| `GET`    | `/api/Product?page=1&pageSize=20`   | List products (paged)   | `200`   |
+| `GET`    | `/api/Product/{id}`                 | Get product by id       | `200`   |
+| `POST`   | `/api/Product`                      | Create a product        | `201`   |
+| `PUT`    | `/api/Product/{id}`                 | Update a product        | `200`   |
+| `DELETE` | `/api/Product/{id}`                 | Delete a product        | `204`   |
 
 ### Response contract
 
-Successful responses return the resource (or a list) **directly**, with the correct HTTP
-status code. There is no wrapper envelope.
+Single resources are returned **directly** with the correct HTTP status code; the list
+endpoint returns a small **paged envelope**. Timestamps are always serialized as UTC
+(ISO-8601 with a trailing `Z`).
 
 The cache origin of `GET` responses is exposed via the **`X-Cache`** response header
 (`HIT` when served from cache, `MISS` when loaded from the database) instead of leaking a
 field into the body.
 
-**`GET /api/Product`** → `200 OK`, header `X-Cache: MISS`
+**`GET /api/Product?page=1&pageSize=20`** → `200 OK`, header `X-Cache: MISS`
+`page` defaults to `1`, `pageSize` to `20` (clamped to a maximum of `100`).
 ```json
-[
-  { "id": 1, "name": "Sample Product", "price": 99.99, "stock": 50, "createdAt": "2026-01-04T00:00:00Z" }
-]
+{
+  "items": [
+    { "id": 1, "name": "Sample Product", "price": 99.99, "stock": 50, "createdAt": "2026-01-04T00:00:00Z" }
+  ],
+  "page": 1,
+  "pageSize": 20,
+  "totalItems": 1,
+  "totalPages": 1
+}
 ```
 
 **`POST /api/Product`** → `201 Created` (with `Location` header)

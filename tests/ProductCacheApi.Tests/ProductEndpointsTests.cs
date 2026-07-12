@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using ProductCacheApi.Features.Products;
 using ProductCacheApi.Features.Products.DTOs;
 using Xunit;
 
@@ -87,5 +88,32 @@ public class ProductEndpointsTests : IClassFixture<ApiFactory>
             new UpdateProductDto { Name = "X", Price = 1m, Stock = 1 });
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetAll_ReturnsPagedEnvelope_AndClampsPageSize()
+    {
+        var page = await _client.GetFromJsonAsync<PagedResult<ProductDto>>("/api/Product?page=1&pageSize=5");
+
+        Assert.NotNull(page);
+        Assert.Equal(1, page!.Page);
+        Assert.Equal(5, page.PageSize);
+
+        // pageSize above the cap is clamped to 100 (not echoed back verbatim)
+        var clamped = await _client.GetFromJsonAsync<PagedResult<ProductDto>>("/api/Product?pageSize=99999");
+        Assert.Equal(100, clamped!.PageSize);
+    }
+
+    [Fact]
+    public async Task Timestamps_AreSerializedAsUtc_Consistently()
+    {
+        var create = await _client.PostAsJsonAsync("/api/Product", ValidProduct("Clock"));
+        var created = await create.Content.ReadFromJsonAsync<ProductDto>();
+
+        var getRaw = await _client.GetStringAsync($"/api/Product/{created!.Id}");
+
+        // Both the POST body and a later GET must render createdAt with a trailing 'Z'.
+        Assert.Contains("\"createdAt\"", getRaw);
+        Assert.Matches("\"createdAt\":\"[^\"]+Z\"", getRaw);
     }
 }
