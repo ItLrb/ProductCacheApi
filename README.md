@@ -1,435 +1,212 @@
 # Product Cache API
 
-API REST desenvolvida em **.NET 8** com foco em boas práticas de backend, cache e observabilidade. Sistema completo de gerenciamento de produtos com cache Redis para alta performance.
+REST API built with **.NET 8** focused on backend best practices: distributed caching,
+structured logging and a consistent HTTP contract. Product management with a Redis
+cache in front of MySQL for read performance.
 
-## 🚀 Tecnologias
+## 🚀 Tech stack
 
 - **.NET 8** (ASP.NET Core)
-- **Entity Framework Core 8.0** (ORM)
-- **MySQL** (Banco de dados)
-- **Redis** (Cache distribuído)
-- **Docker & Docker Compose** (Containerização)
-- **Serilog** (Logging estruturado)
-- **Swagger/OpenAPI** (Documentação da API)
+- **Entity Framework Core 8** + **Pomelo** (MySQL provider)
+- **MySQL** (database)
+- **Redis** (distributed cache, optional)
+- **Docker & Docker Compose**
+- **Serilog** (structured logging)
+- **Swagger / OpenAPI**
+- **xUnit** (unit + integration tests)
 
-## 📌 Funcionalidades
+## 📌 Features
 
-- ✅ **CRUD completo de produtos**
-- ✅ **Cache inteligente com Redis** (invalidação automática)
-- ✅ **Validação de dados** com Data Annotations
-- ✅ **Logs profissionais** (console e arquivo com rotação diária)
-- ✅ **Tratamento global de erros** com middleware customizado
-- ✅ **Respostas padronizadas** com DTOs
-- ✅ **Degradação graciosa** (funciona mesmo sem Redis)
-- ✅ **Documentação automática** com Swagger
+- ✅ Product CRUD
+- ✅ Redis caching with automatic invalidation on writes
+- ✅ **Graceful cache degradation** — the API runs with an in-memory cache when Redis is
+  not configured, and fails fast (no ~5s hangs) when a configured Redis is temporarily down
+- ✅ Input validation with Data Annotations
+- ✅ Consistent error responses via **ProblemDetails** (RFC 9457)
+- ✅ Structured logs (console + daily rolling file)
+- ✅ Health check endpoint
+- ✅ Swagger UI (Development)
 
-## 🧱 Arquitetura
+## 🧱 Architecture
+
+The project uses a **feature-based (vertical slice) layout**:
 
 ```
 ProductCacheApi/
-├── Controllers/          # Endpoints da API
-├── DTOs/                # Data Transfer Objects (entrada/saída)
-├── Entities/             # Entidades do domínio
-├── DbContext/            # Contexto do Entity Framework
-├── Cache/                # Serviço de cache (Redis)
-├── Interfaces/           # Contratos de serviços
-├── Middlewares/          # Middlewares customizados
-├── Responses/            # Modelos de resposta padronizados
-└── Migrations/           # Migrações do banco de dados
+├── Features/
+│   ├── Products/                  # Product slice
+│   │   ├── ProductController.cs   # HTTP endpoints
+│   │   ├── ProductService.cs      # Business logic + caching
+│   │   ├── Product.cs             # Domain entity
+│   │   ├── Result.cs              # Result pattern for write operations
+│   │   ├── CacheResult.cs         # Wraps a value + cache-hit flag
+│   │   └── DTOs/                  # Request/response contracts
+│   └── Cache/
+│       ├── ICacheService.cs
+│       └── RedisCacheService.cs
+├── Config/
+│   ├── AppDbContext.cs            # EF Core context
+│   ├── GlobalExceptionHandler.cs # IExceptionHandler -> ProblemDetails
+│   └── Migrations/
+├── Program.cs                    # Composition root
+├── compose.yaml                  # MySQL + Redis + API
+└── tests/
+    └── ProductCacheApi.Tests/    # xUnit unit + integration tests
 ```
 
-### Princípios de Design
-
-- **Separação de responsabilidades**: Controllers, Services, DTOs e Entities separados
-- **Inversão de dependência**: Uso de interfaces para desacoplamento
-- **Validação em camadas**: DTOs com Data Annotations + ModelState validation
-- **Cache desacoplado**: Interface ICacheService permite trocar implementação facilmente
-- **Tratamento de erros centralizado**: ExceptionMiddleware para erros globais
-
-## 📋 Pré-requisitos
+## 📋 Prerequisites
 
 - [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
-- [MySQL](https://www.mysql.com/downloads/) ou [Docker](https://www.docker.com/)
-- [Redis](https://redis.io/download) ou Docker
-- [Git](https://git-scm.com/)
+- [Docker](https://www.docker.com/) (recommended) or local MySQL + Redis
 
-## 🛠️ Instalação e Configuração
+## 🐳 Running with Docker (recommended)
 
-### 1. Clone o repositório
-
-```bash
-git clone https://github.com/ItLrb/ProductCacheApi.git
-cd ProductCacheApi
-```
-
-### 2. Configure o banco de dados
-
-Edite o arquivo `appsettings.Development.json` com suas credenciais do MySQL:
-
-```json
-{
-  "ConnectionStrings": {
-    "DefaultConnection": "server=localhost;database=productCachedb;user=seu_usuario;password=sua_senha"
-  },
-  "Redis": {
-    "Connection": "localhost:6379"
-  }
-}
-```
-
-### 3. Execute as migrações
+`compose.yaml` brings up **MySQL, Redis and the API** together, wired via healthchecks so
+the API only starts once the database is ready.
 
 ```bash
+cp .env.example .env      # adjust MYSQL_ROOT_PASSWORD etc.
+docker compose up -d --build
+```
+
+- API: `http://localhost:8080`
+- Swagger: `http://localhost:8080/swagger` (Development environment)
+- Health: `http://localhost:8080/health`
+
+## 🛠️ Running locally (without Docker)
+
+Configuration is read from environment variables / user-secrets — **no secrets are stored
+in the repository**. The database connection string is required; Redis is optional.
+
+```bash
+# Required: database connection
+dotnet user-secrets set "ConnectionStrings:DefaultConnection" \
+  "server=localhost;port=3306;database=productcachedb;user=root;password=your-password"
+
+# Optional: enable Redis (otherwise an in-memory cache is used)
+dotnet user-secrets set "Redis:Connection" "localhost:6379"
+
+# Apply migrations
 dotnet ef database update
-```
 
-Ou se preferir criar uma nova migração:
-
-```bash
-dotnet ef migrations add NomeDaMigracao
-dotnet ef database update
-```
-
-### 4. Inicie o Redis (opcional, mas recomendado)
-
-#### Opção A: Docker Compose
-
-```bash
-docker compose up -d
-```
-
-#### Opção B: Redis local
-
-```bash
-# Windows (com Chocolatey)
-choco install redis-64
-
-# Linux
-sudo apt-get install redis-server
-
-# macOS
-brew install redis
-```
-
-**Nota**: A aplicação funciona mesmo sem Redis, mas o cache não estará disponível.
-
-## 🚀 Como Executar
-
-### Desenvolvimento
-
-```bash
-# Restaurar dependências
-dotnet restore
-
-# Compilar
-dotnet build
-
-# Executar
+# Run
 dotnet run
 ```
 
-A aplicação estará disponível em:
-- **API**: `http://localhost:5149`
-- **Swagger UI**: `http://localhost:5149/swagger`
+The app is served at `http://localhost:5149` (see `Properties/launchSettings.json`).
 
-### Produção
+> If `ConnectionStrings:DefaultConnection` is missing, the app fails fast at startup with a
+> clear message instead of returning confusing per-request errors.
 
-```bash
-# Publicar
-dotnet publish -c Release -o ./publish
+## 📚 API
 
-# Executar
-cd publish
-dotnet ProductCacheApi.dll
-```
+Base URL: `http://localhost:8080/api/Product` (or `:5149` when running locally).
 
-## 📚 Endpoints da API
+| Method   | Endpoint            | Description        | Success |
+|----------|---------------------|--------------------|---------|
+| `GET`    | `/api/Product`      | List all products  | `200`   |
+| `GET`    | `/api/Product/{id}` | Get product by id  | `200`   |
+| `POST`   | `/api/Product`      | Create a product   | `201`   |
+| `PUT`    | `/api/Product/{id}` | Update a product   | `200`   |
+| `DELETE` | `/api/Product/{id}` | Delete a product   | `204`   |
 
-### Base URL
-```
-http://localhost:5149/api/ProductControllers
-```
+### Response contract
 
-### Endpoints Disponíveis
+Successful responses return the resource (or a list) **directly**, with the correct HTTP
+status code. There is no wrapper envelope.
 
-| Método | Endpoint | Descrição | Status de Sucesso |
-|--------|----------|-----------|-------------------|
-| `GET` | `/api/ProductControllers` | Lista todos os produtos | 200 |
-| `GET` | `/api/ProductControllers/{id}` | Busca produto por ID | 200 |
-| `POST` | `/api/ProductControllers` | Cria um novo produto | 201 |
-| `PUT` | `/api/ProductControllers/{id}` | Atualiza um produto | 204 |
-| `DELETE` | `/api/ProductControllers/{id}` | Deleta um produto | 204 |
+The cache origin of `GET` responses is exposed via the **`X-Cache`** response header
+(`HIT` when served from cache, `MISS` when loaded from the database) instead of leaking a
+field into the body.
 
-### Exemplos de Uso
-
-#### 1. Listar todos os produtos
-
-```bash
-GET /api/ProductControllers
-```
-
-**Resposta:**
+**`GET /api/Product`** → `200 OK`, header `X-Cache: MISS`
 ```json
-{
-  "source": "cache",
-  "data": [
-    {
-      "id": 1,
-      "name": "Produto Exemplo",
-      "price": 99.99,
-      "stock": 50,
-      "createdAt": "2026-01-04T00:00:00"
-    }
-  ]
-}
+[
+  { "id": 1, "name": "Sample Product", "price": 99.99, "stock": 50, "createdAt": "2026-01-04T00:00:00Z" }
+]
 ```
 
-#### 2. Buscar produto por ID
-
-```bash
-GET /api/ProductControllers/1
-```
-
-**Resposta:**
+**`POST /api/Product`** → `201 Created` (with `Location` header)
 ```json
-{
-  "source": "database",
-  "data": {
-    "id": 1,
-    "name": "Produto Exemplo",
-    "price": 99.99,
-    "stock": 50,
-    "createdAt": "2026-01-04T00:00:00"
-  }
-}
+{ "id": 2, "name": "New Product", "price": 149.99, "stock": 100, "createdAt": "2026-01-04T00:00:00Z" }
 ```
 
-#### 3. Criar produto
+**`PUT /api/Product/1`** → `200 OK` (returns the updated product)
+**`DELETE /api/Product/1`** → `204 No Content` (empty body)
 
-```bash
-POST /api/ProductControllers
-Content-Type: application/json
+### Errors
 
-{
-  "name": "Novo Produto",
-  "price": 149.99,
-  "stock": 100
-}
-```
+All errors use the standard **ProblemDetails** shape (`application/problem+json`).
 
-**Resposta:**
-```json
-{
-  "success": true,
-  "message": "Created product successfully",
-  "data": {
-    "id": 2,
-    "name": "Novo Produto",
-    "price": 149.99,
-    "stock": 100
-  }
-}
-```
-
-#### 4. Atualizar produto
-
-```bash
-PUT /api/ProductControllers/1
-Content-Type: application/json
-
-{
-  "name": "Produto Atualizado",
-  "price": 199.99,
-  "stock": 75
-}
-```
-
-**Resposta:** `204 No Content`
-
-#### 5. Deletar produto
-
-```bash
-DELETE /api/ProductControllers/1
-```
-
-**Resposta:** `204 No Content`
-
-### Validações
-
-A API valida automaticamente os dados de entrada:
-
-- **Name**: Obrigatório (string não vazia)
-- **Price**: Obrigatório, mínimo 0.01
-- **Stock**: Obrigatório, mínimo 0
-
-**Exemplo de erro de validação:**
+Validation error (`400`):
 ```json
 {
   "type": "https://tools.ietf.org/html/rfc9110#section-15.5.1",
   "title": "One or more validation errors occurred.",
   "status": 400,
-  "errors": {
-    "Name": ["The Name field is required."],
-    "Price": ["The field Price must be between 0,01 and ..."]
-  }
+  "errors": { "Price": ["The field Price must be between 0.01 and ..."] }
 }
 ```
 
-## 🔧 Configuração
-
-### Variáveis de Ambiente
-
-Para produção, use variáveis de ambiente ou User Secrets:
-
-```bash
-# User Secrets (desenvolvimento)
-dotnet user-secrets set "ConnectionStrings:DefaultConnection" "server=localhost;database=productCachedb;user=root;password=root"
-dotnet user-secrets set "Redis:Connection" "localhost:6379"
-```
-
-### appsettings.json
-
+Not found (`404`):
 ```json
 {
-  "ConnectionStrings": {
-    "DefaultConnection": ""
-  },
-  "Redis": {
-    "Connection": ""
-  },
-  "Logging": {
-    "LogLevel": {
-      "Default": "Information",
-      "Microsoft.AspNetCore": "Warning"
-    }
-  },
-  "AllowedHosts": "*"
+  "title": "Resource not found",
+  "status": 404,
+  "detail": "Product with ID 1 not found"
 }
 ```
 
-## 📊 Cache
+## 📊 Caching
 
-O sistema utiliza Redis para cache com as seguintes características:
+- List cache key: `products:all` (TTL 5 min)
+- Per-item cache key: `product:{id}` (TTL 5 min)
+- Cache is invalidated on Create / Update / Delete
+- Cache is best-effort: a Redis outage is logged and the request continues against the database
 
-- **Cache de lista**: Chave `products:all` (TTL: 5 minutos)
-- **Cache individual**: Chave `product:{id}` (TTL: 5 minutos)
-- **Invalidação automática**: Cache é invalidado em Create, Update e Delete
-- **Degradação graciosa**: Se Redis não estiver disponível, a aplicação continua funcionando normalmente
+## 📝 Logging
 
-## 📝 Logs
+Serilog writes to the console and to `Logs/log-YYYYMMDD.txt` (daily rolling).
 
-Os logs são gerados automaticamente pelo Serilog:
-
-- **Console**: Logs em tempo real no console
-- **Arquivo**: Logs salvos em `Logs/log-YYYYMMDD.txt` (rotação diária)
-- **Níveis**: Information, Warning, Error
-
-Exemplo de log:
-```
-2026-01-04 00:00:00 [INF] Creating product {"Name":"Produto","Price":99.99,"Stock":50}
-2026-01-04 00:00:01 [INF] Product with ID 1 was updated successfully
-```
-
-## 🐳 Docker
-
-### Docker Compose
-
-O arquivo `compose.yaml` inclui apenas o Redis. Para um setup completo com MySQL:
-
-```yaml
-services:
-  mysql:
-    image: mysql:8.0
-    container_name: productcache_mysql
-    environment:
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: productCachedb
-    ports:
-      - "3306:3306"
-    volumes:
-      - mysql_data:/var/lib/mysql
-
-  redis:
-    image: redis:7
-    container_name: productcache_redis
-    ports:
-      - "6379:6379"
-
-volumes:
-  mysql_data:
-```
-
-### Dockerfile
-
-O projeto inclui um `Dockerfile` para containerização da aplicação:
+## 🧪 Tests
 
 ```bash
-docker build -t productcacheapi .
-docker run -p 8080:8080 productcacheapi
+dotnet test
 ```
 
-## 🧪 Testes
+The `tests/ProductCacheApi.Tests` project contains:
+- **Unit tests** for `ProductService` (EF Core InMemory + a fake cache) covering CRUD and
+  cache invalidation.
+- **Integration tests** driving the real HTTP pipeline via `WebApplicationFactory`
+  (status codes, `X-Cache` header, ProblemDetails) with the database swapped for InMemory.
 
-Para testar a API, você pode usar:
+## 🔄 CI
 
-- **Swagger UI**: `http://localhost:5149/swagger`
-- **Postman**: Importe a coleção (se disponível)
-- **cURL**: Exemplos nos endpoints acima
-- **HTTP Client**: Arquivo `ProductCacheApi.http` (se configurado)
+GitHub Actions (`.github/workflows/ci.yml`) restores, builds and tests on every push and
+pull request to `main`.
 
-## 🛡️ Segurança
+## 🔒 Security note
 
-### Boas Práticas Implementadas
+- No secrets are committed. Local configuration uses **user-secrets**; Docker uses the
+  git-ignored `.env` file (see `.env.example`).
+- ⚠️ **Historical exposure:** earlier commits in this repository contained a database
+  password (`.env`, `appsettings*.json`). That credential must be considered compromised
+  and **rotated**. The value still exists in the git history; purging it would require a
+  history rewrite (`git filter-repo`) and a force-push, which is intentionally left as an
+  explicit decision for the repository owner.
 
-- ✅ Validação de entrada com Data Annotations
-- ✅ DTOs para isolar entidades do contrato da API
-- ✅ Tratamento de erros sem expor detalhes sensíveis
-- ✅ Logs estruturados para auditoria
+### Recommended for production
 
-### Recomendações para Produção
+- [ ] Authentication / authorization
+- [ ] HTTPS + HSTS
+- [ ] Rate limiting
+- [ ] CORS policy
+- [ ] Readiness vs. liveness health checks
 
-- [ ] Adicionar autenticação/autorização (JWT, OAuth, etc.)
-- [ ] Implementar HTTPS
-- [ ] Adicionar rate limiting
-- [ ] Configurar CORS adequadamente
-- [ ] Usar variáveis de ambiente para secrets
-- [ ] Implementar health checks
-- [ ] Adicionar monitoramento (Application Insights, etc.)
+## 📄 License
 
-## 📦 Estrutura do Projeto
+MIT — see `LICENSE`.
 
-```
-ProductCacheApi/
-├── Controllers/
-│   └── ProductControllers.cs      # Endpoints da API
-├── DTOs/
-│   ├── CreateProductDto.cs          # DTO para criação
-│   ├── UpdateProductDto.cs          # DTO para atualização
-│   └── ProductDto.cs                # DTO para resposta
-├── Entities/
-│   └── Product.cs                   # Entidade do domínio
-├── DbContext/
-│   └── AppDbContext.cs              # Contexto do EF Core
-├── Cache/
-│   └── RedisCacheService.cs         # Implementação do cache
-├── Interfaces/
-│   └── ICacheService.cs             # Interface do cache
-├── Middlewares/
-│   └── ExceptionMiddleware.cs      # Tratamento global de erros
-├── Responses/
-│   └── ApiResponse.cs               # Modelo de resposta padronizado
-├── Migrations/                       # Migrações do banco
-├── Logs/                            # Arquivos de log
-├── Program.cs                       # Configuração da aplicação
-├── appsettings.json                  # Configurações
-└── appsettings.Development.json     # Configurações de desenvolvimento
-```
+## 👤 Author
 
-## 📄 Licença
-
-Este projeto está sob a licença MIT. Veja o arquivo `LICENSE` para mais detalhes.
-
-## 👤 Autor
-
-**Italo**
-- GitHub: [@ItLrb](https://github.com/ItLrb)
+**Italo** — [@ItLrb](https://github.com/ItLrb)

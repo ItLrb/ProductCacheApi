@@ -1,4 +1,4 @@
-namespace ProductCacheApi.Interfaces;
+namespace ProductCacheApi.Features.Cache;
 
 public interface ICacheService
 {

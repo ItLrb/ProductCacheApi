@@ -1,6 +1,35 @@
 @ProductCacheApi_HostAddress = http://localhost:5149
 
-GET {{ProductCacheApi_HostAddress}}/weatherforecast/
+### List all products
+GET {{ProductCacheApi_HostAddress}}/api/Product
 Accept: application/json
 
-###
+### Get product by id
+GET {{ProductCacheApi_HostAddress}}/api/Product/1
+Accept: application/json
+
+### Create a product
+POST {{ProductCacheApi_HostAddress}}/api/Product
+Content-Type: application/json
+
+{
+  "name": "Sample Product",
+  "price": 149.99,
+  "stock": 100
+}
+
+### Update a product
+PUT {{ProductCacheApi_HostAddress}}/api/Product/1
+Content-Type: application/json
+
+{
+  "name": "Updated Product",
+  "price": 199.99,
+  "stock": 75
+}
+
+### Delete a product
+DELETE {{ProductCacheApi_HostAddress}}/api/Product/1
+
+### Health check
+GET {{ProductCacheApi_HostAddress}}/health
