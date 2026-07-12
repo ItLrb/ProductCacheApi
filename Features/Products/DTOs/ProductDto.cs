@@ -1,9 +1,10 @@
-namespace ProductCacheApi.DTOs;
+namespace ProductCacheApi.Features.Products.DTOs;
 
 public record ProductDto
 {
-    public int Id { get; set; }
-    public string Name { get; set; } = string.Empty;
-    public decimal Price { get; set; }
-    public int Stock { get; set; }
+    public int Id { get; init; }
+    public string Name { get; init; } = string.Empty;
+    public decimal Price { get; init; }
+    public int Stock { get; init; }
+    public DateTime CreatedAt { get; init; }
 }

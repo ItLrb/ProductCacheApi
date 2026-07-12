@@ -1,10 +1,16 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace ProductCacheApi.DTOs;
+namespace ProductCacheApi.Features.Products.DTOs;
 
 public record CreateProductDto
 {
-    [Required] public string Name { get; set; } = string.Empty;
-    [Range(0.01, double.MaxValue)] public decimal Price { get; set; }
-    [Range(0, int.MaxValue)] public int Stock { get; set; }
+    [Required]
+    [StringLength(200, MinimumLength = 1)]
+    public string Name { get; init; } = string.Empty;
+
+    [Range(0.01, double.MaxValue)]
+    public decimal Price { get; init; }
+
+    [Range(0, int.MaxValue)]
+    public int Stock { get; init; }
 }

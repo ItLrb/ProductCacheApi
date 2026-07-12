@@ -19,5 +19,9 @@ RUN dotnet publish "ProductCacheApi.csproj" -c $BUILD_CONFIGURATION -o /app/publ
 
 FROM base AS final
 WORKDIR /app
-COPY --from=publish /app/publish .
+COPY --from=publish --chown=$APP_UID /app/publish .
+# Serilog writes rolling files under ./Logs; make sure the non-root user can create them.
+USER root
+RUN mkdir -p /app/Logs && chown $APP_UID /app/Logs
+USER $APP_UID
 ENTRYPOINT ["dotnet", "ProductCacheApi.dll"]

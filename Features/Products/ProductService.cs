@@ -1,22 +1,19 @@
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using ProductCacheApi.Cache;
-using ProductCacheApi.Entities;
-using ProductCacheApi.DbContext;
-using ProductCacheApi.DTOs;
-using ProductCacheApi.Features.Products;
-using ProductCacheApi.Interfaces;
-using ProductCacheApi.Middlewares;
-using ProductCacheApi.Responses;
+using ProductCacheApi.Config;
+using ProductCacheApi.Features.Cache;
+using ProductCacheApi.Features.Products.DTOs;
 
-namespace ProductCacheApi.Controllers;
+namespace ProductCacheApi.Features.Products;
 
 public class ProductService
 {
+    private const string ProductListCacheKey = "products:all";
+    private static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(5);
+
     private readonly AppDbContext _context;
     private readonly ICacheService _cache;
     private readonly ILogger<ProductService> _logger;
-    
+
     public ProductService(AppDbContext context, ICacheService cache, ILogger<ProductService> logger)
     {
         _context = context;
@@ -24,36 +21,57 @@ public class ProductService
         _logger = logger;
     }
 
-    private const string ProductListCacheKey = "products:all";
-    public async Task<ProductsResponseDto> GetAll()
-    {
-        var cachedProducts = await _cache.GetAsync<List<ProductDto>>(ProductListCacheKey);
+    private static string ProductCacheKey(int id) => $"product:{id}";
 
-        if (cachedProducts is not null) 
-            return new ProductsResponseDto("cache", cachedProducts);
-        
-        var products = await _context.Products.AsNoTracking().ToListAsync();
-        
-        var productsDto = products.Select(p => new ProductDto
-        {
-           Id = p.Id, Name = p.Name, Price = p.Price, Stock = p.Stock
-        }).ToList();
-        
-        await _cache.SetAsync(ProductListCacheKey, productsDto, TimeSpan.FromMinutes(5));
-        
-        _logger.LogInformation("All products was triggered successfully");
-        return new ProductsResponseDto("cache", productsDto);
+    public async Task<CacheResult<PagedResult<ProductDto>>> GetAll(int page, int pageSize, CancellationToken cancellationToken = default)
+    {
+        var (products, fromCache) = await GetAllProducts(cancellationToken);
+
+        var items = products
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToList();
+
+        var paged = new PagedResult<ProductDto>(items, page, pageSize, products.Count);
+        return new CacheResult<PagedResult<ProductDto>>(paged, fromCache);
     }
 
-    public async Task<ProductResponseDto?> GetById(int id)
+    // The full catalog is cached under a single key and paged in memory. This keeps cache
+    // invalidation trivial (one key to drop on writes) and is well suited to a product
+    // catalog; a very large, high-churn dataset would call for DB-side paging with a
+    // generation-based cache key instead.
+    private async Task<(List<ProductDto> Products, bool FromCache)> GetAllProducts(CancellationToken cancellationToken)
     {
-        _logger.LogInformation("Product request by ID were triggered");
-        
-        var cacheKey = $"product:{id}";
+        var cached = await _cache.GetAsync<List<ProductDto>>(ProductListCacheKey, cancellationToken);
+        if (cached is not null)
+            return (cached, true);
 
-        var cachedProduct = await _cache.GetAsync<ProductDto>(cacheKey);
-        if (cachedProduct is not null)
-            return new ProductResponseDto("cache", cachedProduct);
+        var products = await _context.Products
+            .AsNoTracking()
+            .OrderBy(p => p.Id)
+            .Select(p => new ProductDto
+            {
+                Id = p.Id,
+                Name = p.Name,
+                Price = p.Price,
+                Stock = p.Stock,
+                CreatedAt = p.CreatedAt
+            })
+            .ToListAsync(cancellationToken);
+
+        await _cache.SetAsync(ProductListCacheKey, products, CacheTtl, cancellationToken);
+
+        _logger.LogInformation("Loaded {Count} products from the database", products.Count);
+        return (products, false);
+    }
+
+    public async Task<CacheResult<ProductDto>?> GetById(int id, CancellationToken cancellationToken = default)
+    {
+        var cacheKey = ProductCacheKey(id);
+
+        var cached = await _cache.GetAsync<ProductDto>(cacheKey, cancellationToken);
+        if (cached is not null)
+            return CacheResult.Hit(cached);
 
         var product = await _context.Products
             .AsNoTracking()
@@ -63,94 +81,80 @@ public class ProductService
                 Id = p.Id,
                 Name = p.Name,
                 Price = p.Price,
-                Stock = p.Stock
+                Stock = p.Stock,
+                CreatedAt = p.CreatedAt
             })
-            .FirstOrDefaultAsync();
+            .FirstOrDefaultAsync(cancellationToken);
 
         if (product is null)
             return null;
 
-        await _cache.SetAsync(
-            cacheKey,
-            product,
-            TimeSpan.FromMinutes(5)
-        );
+        await _cache.SetAsync(cacheKey, product, CacheTtl, cancellationToken);
 
-        _logger.LogInformation("Product requested by ID {ProductID}", product.Id);
-        return new ProductResponseDto("database", product);
+        _logger.LogInformation("Loaded product {ProductId} from the database", product.Id);
+        return CacheResult.Miss(product);
     }
 
-    public async Task<Result<ProductDto>> Create(CreateProductDto dto)
+    public async Task<ProductDto> Create(CreateProductDto dto, CancellationToken cancellationToken = default)
     {
-        if (dto.Price <= 0) 
-            return Result<ProductDto>.Failure("The price can't be less than 0");
-
-        var product = new Entity 
-        { 
-            Name = dto.Name, 
-            Price = dto.Price, 
-            Stock = dto.Stock, 
-            CreatedAt = DateTime.UtcNow 
+        var product = new Product
+        {
+            Name = dto.Name,
+            Price = dto.Price,
+            Stock = dto.Stock,
+            CreatedAt = DateTime.UtcNow
         };
 
         _context.Products.Add(product);
-        await _context.SaveChangesAsync();
-        await _cache.RemoveAsync("ProductListCacheKey");
+        await _context.SaveChangesAsync(cancellationToken);
 
-        var response = new ProductDto
-        {
-            Id = product.Id,
-            Name = product.Name,
-            Price = product.Price,
-            Stock = product.Stock
-        };
-        
-        return Result<ProductDto>.Success(response);
+        await _cache.RemoveAsync(ProductListCacheKey, cancellationToken);
+
+        _logger.LogInformation("Product {ProductId} was created", product.Id);
+        return ToDto(product);
     }
 
-    public async Task<Result<ProductDto>> Update(int id, UpdateProductDto dto)
+    public async Task<Result<ProductDto>> Update(int id, UpdateProductDto dto, CancellationToken cancellationToken = default)
     {
-        var product = await _context.Products.FindAsync(id);
-        if (product == null)
-            return Result<ProductDto>.Failure("Product not found");
-        
+        var product = await _context.Products.FindAsync([id], cancellationToken);
+        if (product is null)
+            return Result<ProductDto>.Failure($"Product with ID {id} not found", ResultError.NotFound);
+
         product.Name = dto.Name;
         product.Price = dto.Price;
         product.Stock = dto.Stock;
-        
-        await _context.SaveChangesAsync();
 
-        await _cache.RemoveAsync(ProductListCacheKey);
-        await _cache.RemoveAsync($"product:{id}");
+        await _context.SaveChangesAsync(cancellationToken);
 
-        _logger.LogInformation("Product with ID {ProductId} was updated successfully", product.Id);
+        await _cache.RemoveAsync(ProductListCacheKey, cancellationToken);
+        await _cache.RemoveAsync(ProductCacheKey(id), cancellationToken);
 
-        var response = new ProductDto
-        {
-            Id = product.Id,
-            Name = product.Name,
-            Price = product.Price,
-            Stock = product.Stock
-        };
-        
-        return Result<ProductDto>.Success(response);
+        _logger.LogInformation("Product {ProductId} was updated", product.Id);
+        return Result<ProductDto>.Success(ToDto(product));
     }
 
-    public async Task<Result<bool>> Delete(int id)
+    public async Task<Result<bool>> Delete(int id, CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Delete product by ID was requested");
-        
-        var product = await _context.Products.FindAsync(id);
-        if (product == null)
-            return Result<bool>.Failure($"Product with ID {id} not found");
-        
+        var product = await _context.Products.FindAsync([id], cancellationToken);
+        if (product is null)
+            return Result<bool>.Failure($"Product with ID {id} not found", ResultError.NotFound);
+
         _context.Products.Remove(product);
-        await _context.SaveChangesAsync();
+        await _context.SaveChangesAsync(cancellationToken);
 
-        await _cache.RemoveAsync(ProductListCacheKey);
-        await _cache.RemoveAsync($"product:{id}");
+        await _cache.RemoveAsync(ProductListCacheKey, cancellationToken);
+        await _cache.RemoveAsync(ProductCacheKey(id), cancellationToken);
 
-        _logger.LogInformation("Product with ID {ProductId} by the name {ProductName} was successfully deleted", product.Id, product.Name);
+        _logger.LogInformation("Product {ProductId} ({ProductName}) was deleted", product.Id, product.Name);
         return Result<bool>.Success(true);
     }
+
+    private static ProductDto ToDto(Product p) => new()
+    {
+        Id = p.Id,
+        Name = p.Name,
+        Price = p.Price,
+        Stock = p.Stock,
+        CreatedAt = p.CreatedAt
+    };
 }
